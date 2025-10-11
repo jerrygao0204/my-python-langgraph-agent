@@ -1,0 +1,70 @@
+# config.yaml
+#config/config.yaml - AI系统核心配置文件
+#--- 模型通用配置 ---
+llm:
+    
+    #生产环境使用的 LLM (例如用于决策和最终回复)
+    prod_model:
+        name: "gpt-3.5-turbo"
+        provider: "openai"       # 对应 factory/llm_factory.py 中的映射
+        temperature: 0.7
+        max_tokens: 4000
+    
+    #用于 RAG 总结或意图识别的 LLM
+    summary_model:
+        name: "Local-Llama-7B"
+        provider: "huggingface"  # 对应 factory/llm_factory.py 中的映射
+        pipeline_url: "http://localhost:8080/generate" # 本地部署 LLM 的 API 地址
+        temperature: 0.5
+
+#--- 嵌入模型配置 (RAG) ---
+embedding:
+
+    #文本块嵌入模型
+    text_embedding:
+        name: "text-embedding-ada-002"
+        provider: "openai"       # 对应 factory/embedding_factory.py 中的映射
+        
+    #知识图谱/专业领域嵌入模型 (以 HuggingFace BGE 为例)
+    bge_embedding:
+        name: "BAAI/bge-small-zh-v1.5"
+        provider: "huggingface"
+
+#--- 工具配置 ---
+tools:
+
+    #数学计算工具
+    math_solver:
+        type: "calculator"
+        version: "v2.1"
+    
+    #外部网络搜索工具
+    web_search:
+        type: "search"
+        api_url: "https://search.api/v1"
+
+#--- agent配置 ---
+agents:
+    primary_router:
+        type: "router"              # 对应 AgentFactory 中的 AGENT_MAP 键
+        name: "MainRouter"
+        # 依赖注入配置：声明 Agent 需要哪些组件
+        dependencies:
+            llm_key: "prod_model"     # 依赖 LLMFactory 中的 'prod_model'
+            tools_keys:               # 依赖 ToolsFactory 中的这些工具
+                    - "web_search"
+                    - "math_solver"
+            rag_key: "primary_vector_store"     # 依赖 ragFactory 中的 'primary_vector_store'
+        # Agent 自身参数
+        routing_threshold: 0.8
+
+#--- RAG 配置 ---
+rag:
+    primary_vector_store:
+        type: "chroma"
+        db_path: "./vector_storage/prod"
+        collection_name: "main_knowledge"
+        # 依赖注入配置
+        dependencies:
+            embed_key: "text_embedding" # 依赖 EmbeddingFactory 中的 'text_embedding'
+
