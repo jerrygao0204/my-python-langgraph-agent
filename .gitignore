@@ -1,0 +1,33 @@
+# Python 缓存文件
+__pycache__/
+*.py[cod]
+*.so
+
+# 虚拟环境目录（常见名）
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+
+# Jupyter Notebook 检查点
+.ipynb_checkpoints/
+
+# 日志文件
+*.log
+
+# 环境变量文件
+.env
+*.env
+
+# VS Code 配置文件（可选）
+.vscode/
+
+# Mac 系统文件（可选）
+.DS_Store
+
+# 项目构建输出（可选）
+build/
+dist/
+*.egg-info/
+
