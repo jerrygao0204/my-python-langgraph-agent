@@ -48,7 +48,7 @@ class AgentFactory(BaseFactory):
         # 2. 从配置中提取依赖组件的 key
         llm_dependency_key = agent_component_config.get("dependencies", {}).get("llm_key")
         tools_dependency_keys = agent_component_config.get("dependencies", {}).get("tools_keys", [])
-        rag_dependency_key = agent_component_config.get("dependencies", {}).get("rag_keys", [])
+        rag_dependency_key = agent_component_config.get("dependencies", {}).get("rag_key")
 
         # 3. 通过注入的工厂获取依赖实例
         llm_instance = None
@@ -65,15 +65,15 @@ class AgentFactory(BaseFactory):
         if rag_dependency_key:
             # 依赖注入 rag
             rag_instance = self.rag_factory.get_instance(rag_dependency_key)
-            print(f"  [Agent] 依赖 RAG 模块: {rag_instance.__class__.__name__}")
+            # print(f"[Agent] 依赖 RAG 模块: {rag_instance.__class__.__name__}")
             
         # 4. 实例化 Agent，并将所有依赖注入
         agent_instance = AgentClass(
             llm=llm_instance,
             tools=tools_instances,
             config=agent_component_config,
-            rag=rag_instance,
-            # rag_module=rag_instance,
+            # rag=rag_instance,
+            rag_module=rag_instance
         )
 
         

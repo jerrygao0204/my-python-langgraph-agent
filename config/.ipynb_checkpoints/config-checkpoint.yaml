@@ -51,9 +51,7 @@ agents:
         # 依赖注入配置：声明 Agent 需要哪些组件
         dependencies:
             llm_key: "prod_model"     # 依赖 LLMFactory 中的 'prod_model'
-            tools_keys:               # 依赖 ToolsFactory 中的这些工具
-                    - "web_search"
-                    - "math_solver"
+            tools_keys: ["web_search", "math_solver"]               # 依赖 ToolsFactory 中的这些工具
             rag_key: "primary_vector_store"     # 依赖 ragFactory 中的 'primary_vector_store'
         # Agent 自身参数
         routing_threshold: 0.8

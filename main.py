@@ -23,7 +23,7 @@ def main():
     embed_factory = EmbeddingFactory(full_config)
     tools_factory = ToolsFactory(full_config)
     rag_factory = RAGFactory(full_config, embed_factory) # 注入 EmbeddingFactory
-    agent_factory = AgentFactory(full_config, llm_factory, tools_factory)
+    agent_factory = AgentFactory(full_config, llm_factory, tools_factory, rag_factory)
 
     # --- 2. 从 Agent Factory 获取核心 Agent 流程 ---
     
@@ -31,7 +31,12 @@ def main():
     router_agent = agent_factory.get_instance("primary_router")
     
     # --- 3. 从 RAG Factory 获取 RAG 模块并演示 ---
-    rag_processor = rag_factory.get_instance("primary_vector_store")
+    # rag_processor = rag_factory.get_instance("primary_vector_store")
+    rag_processor = router_agent.rag_module
+
+    if rag_processor is None:
+        raise RuntimeError("RAG 模块未成功注入到 RouterAgent 中。请检查 AgentFactory 和 config.yaml。")
+    
     
     # 演示 RAG 数据摄取
     documents_to_ingest = [
@@ -60,14 +65,41 @@ def main():
     print("-----------------------------------------------------")
     
 
-    # 演示 Agent 流程调用 (保持不变)
-    print("\n--- Agent 流程调用演示 ---")
-    user_state = {"input": "帮我计算 12 乘以 5 等于多少？"}
-    final_state = router_agent.process(user_state)
-    print(f"原始输入: {user_state['input']}")
-    print(f"Agent 最终结果: {final_state['output']}")
+    # # 演示 Agent 流程调用 (保持不变)
+    # print("\n--- Agent 流程调用演示 ---")
+    # user_state = {"input": "帮我计算 12 乘以 5 等于多少？"}
+    # final_state = router_agent.process(user_state)
+    # print(f"原始输入: {user_state['input']}")
+    # print(f"Agent 最终结果: {final_state['output']}")
 
-    print("\n[✔ 架构框架搭建完成]：已进入 RAG 模块重构阶段。")
+    # --- 4. 演示 Agent LangGraph 流程调用 ---
+    # 获取 Router Agent 流程（这里 AgentFactory 会调用 RouterAgent.get_agent_flow()）
+    agent_flow = router_agent.get_agent_flow()
+
+    print("\n--- LangGraph 流程调用演示 (计算) ---")
+    
+    # 案例 1: 计算问题 (应该路由到 CALCULATOR 节点)
+    calc_input = "帮我计算 12 乘以 5 等于多少？"
+    
+    # 运行 LangGraph 流程
+    # 注意：LangGraph 的输入是一个字典，包含 "input" 键
+    
+    result = agent_flow.invoke({"input": calc_input}) 
+    
+    print(f"原始输入: {calc_input}")
+    print(f"LangGraph 最终结果:\n{result['output']}")
+    
+    # 案例 2: RAG 问题 (应该路由到 RAG 节点)
+    rag_input = "LLM工厂用于解耦多模型调用，这是什么架构的核心？"
+
+    print("\n--- LangGraph 流程调用演示 (RAG 知识查询) ---")
+    result = agent_flow.invoke({"input": rag_input})
+    
+    print(f"原始输入: {rag_input}")
+    print(f"LangGraph 最终结果:\n{result['output']}")
+    
+    print("\n[✔ 架构框架搭建完成]：已进入 LangGraph 流程编排阶段。")
+    
 
 if __name__ == '__main__':
     main()
