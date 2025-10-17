@@ -1,201 +1,200 @@
-from typing import Dict, Any, List, Type
+from typing import Dict, Any, List
 from models.llm_abc import AbstractAgent, AbstractLLM, AbstractTool
 from rag.rag_module import RAGModule
 from langgraph.graph import StateGraph, END, START 
-from functools import partial
 
-# --- LangGraph 流程节点函数 ---
-def execute_rag(state: Dict[str, Any], rag_module: RAGModule, llm: AbstractLLM) -> Dict[str, Any]:
-    """LangGraph 节点：执行 RAG 流程。"""
-    query = state.get("query", "")
-    if not query or not rag_module:
-        return {"output": "RAG 流程失败：查询或模块缺失。", "decision": "END"}
+
+
+# --- Agent 实现：RAGAgent (负责执行 RAG 流程) ---
+class RAGAgent(AbstractAgent):
+    """专门执行 RAG 流程的 Agent。"""
+    def __init__(self, llm: AbstractLLM, tools: Dict[str, AbstractTool], rag_module: RAGModule | None,config: Dict[str, Any]):
+        # 依赖注入：注入 LLM 实例和 Tools 实例
+        self.llm = llm
+        self.rag_module = rag_module
+        self.tools = tools
+        self.config = config
+        self.name = config.get("name", "RAGAgent")
+        print(f"  [Agent] RAGAgent '{self.name}' 已初始化。")
+        print(f"  [Agent] 依赖 LLM: {self.llm.__class__.__name__}")
+        print(f"  [Agent] 依赖 RAG Module: {self.rag_module.__class__.__name__}")
+        print(f"  [Agent] 依赖 Tools: {list(tools.keys())}")
+
+    def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """执行混合搜索和 LLM 总结。"""
+        query = state.get("query", "")
+        if not query:
+            return {"output": "RAG Agent 失败：查询缺失。", "decision": "END"}
+            
+        print(f"\n[RAG Agent] -> 执行混合搜索：{query[:20]}...")
+        context_docs = self.rag_module.hybrid_search(query, top_k=2)
+        context = "\n".join(context_docs)
         
-    print(f"\n[LangGraph RAG Node] -> 执行混合搜索：{query[:20]}...")
-    context_docs = rag_module.hybrid_search(query, top_k=2)
-    context = "\n".join(context_docs)
-    
-    # 使用 LLM 进行总结
-    final_answer = llm.generate(f"请基于以下上下文，回答用户的问题：{query}\n上下文:\n{context}")
+        # 使用 LLM 进行总结
+        final_answer = self.llm.generate(f"请基于以下上下文，回答用户的问题：{query}\n上下文:\n{context}")
 
-    return {"output": f"[RAG 流程完成]\n[检索上下文]：{context}\n[最终回复]：{final_answer}", "decision": "END"}
+        return {
+            "output": f"[RAG 流程完成]\n[检索上下文]：{context}\n[LLM 最终回复]：{final_answer}", 
+            "decision": "END" # RAGAgent 流程结束
+        }
+
+    def get_agent_flow(self) -> Any:
+        # 子 Agent 通常被视为父图的一个节点，流程由父图定义，但我们仍然需要实现抽象方法
+        return self.process # 简单返回 process 方法
 
 
-def execute_tool(state: Dict[str, Any], llm: AbstractLLM) -> Dict[str, Any]:
-    """LangGraph 节点：执行 Tool 流程并总结。"""
-    tool_output = state.get("tool_output", "N/A")
-    query = state.get("query", "N/A")
+# --- Agent 实现：CalculatorAgent (负责执行 Tool 流程) ---
+class CalculatorAgent(AbstractAgent):
+    """专门执行数学计算和结果总结的 Agent。"""
 
-    print(f"\n[LangGraph Tool Node] -> 工具结果：{tool_output[:20]}...")
-
-    # 使用 LLM 格式化回复
-    final_answer = llm.generate(f"用户问题：{query}。工具结果：{tool_output}。请基于工具结果简洁回复。")
-    
-    return {"output": f"[Tool 流程完成]\n[LLM 最终回复]：{final_answer}", "decision": "END"}
+    def __init__(self, llm: AbstractLLM, tools: Dict[str, AbstractTool], config: Dict[str, Any]):
+        self.llm = llm
+        # 为了执行 Tool，我们需要工具的引用
+        self.tools = tools 
+        self.name = config.get("name", "CalculatorAgent")
+        print(f"  [Agent] CalculatorAgent '{self.name}' 已初始化。")
         
-# --- Agent 实现：RouterAgent 模拟 ---
+    def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """解析表达式，调用 Tool，并进行 LLM 总结。"""
+        user_input = state.get("input", "")
+        tool_name = "math_solver" # 硬编码工具键名
+        
+        # 【核心逻辑：将表达式解析和 Tool 调用移到这里，实现完全解耦】
+        try:
+            # 1. 表达式解析（沿用 RouterAgent 中修复后的逻辑）
+            calc_text = user_input.split("计算", 1)[-1].strip()
+            if '等于' in calc_text:
+                calculation_text = calc_text.split("等于", 1)[0].strip()
+            else:
+                calculation_text = calc_text.strip()
+            
+            expression = (
+                calculation_text
+                .replace("乘以", "*")
+                .replace("加", "+")
+                .replace("减", "-")
+                .replace("除以", "/")
+                .replace("除", "/")
+                .replace(" ", "")
+            )
+
+            # 2. 实际运行 Tool
+            tool_output = self.tools[tool_name].run(expression) 
+            print(f"\n[Calculator Agent] -> 工具结果：{tool_output[:20]}...")
+            
+            # 3. 使用 LLM 格式化回复
+            final_answer = self.llm.generate(f"用户问题：{user_input}。工具结果：{tool_output}。请基于工具结果简洁回复。")
+
+            return {
+                "output": f"[Tool 流程完成]\n[LLM 最终回复]：{final_answer}", 
+                "decision": "END"
+            }
+
+        except Exception as e:
+            return {
+                "output": f"[Tool 流程出错]: 无法计算或解析表达式 '{user_input}'. 错误: {e}", 
+                "decision": "END"
+            }
+
+    def get_agent_flow(self) -> Any:
+        # 简单返回 process 方法
+        return self.process
+
+# --- Agent 实现：RouterAgent (更新构造函数和 get_agent_flow) ---
 class RouterAgent(AbstractAgent):
     """
     Agent 路由器：模拟根据用户输入进行意图识别和流程选择。
-    这个 Agent 依赖于一个 LLM 和一个 Tools 集合。
+    现在它注入了子 Agent 实例，并将执行逻辑委托给它们。
     """
-    def __init__(self, llm: AbstractLLM, tools: Dict[str, AbstractTool], rag_module: RAGModule | None,config: Dict[str, Any]):
-        # 依赖注入：注入 LLM 实例和 Tools 实例
+    def __init__(self, llm: AbstractLLM, tools: Dict[str, AbstractTool], rag_module: RAGModule, 
+                 config: Dict[str, Any], **executor_agents: AbstractAgent): # ⬅️ 注入子 Agent
+        
+        # 依赖注入：注入 LLM 实例, Tools 集合, RAG 模块
         self.llm = llm
         self.tools = tools
         self.rag_module = rag_module
         self.config = config
         self.name = config.get("name", "DefaultRouter")
+        self.executor_agents = executor_agents
         
+        # 注入子 Agent 实例
+        # 必须使用与 AgentFactory 注入时相同的 key
+        self.rag_executor = executor_agents.get("rag_executor")     
+        self.calc_executor = executor_agents.get("calc_executor")   
+        
+        # 确保子 Agent 已注入
+        if not self.rag_executor or not self.calc_executor:
+             raise RuntimeError("RouterAgent 启动失败：缺少必要的执行 Agent (rag_executor 或 calc_executor)。")
+
         print(f"  [Agent] RouterAgent '{self.name}' 已初始化。")
         print(f"  [Agent] 依赖 LLM: {self.llm.__class__.__name__}")
         print(f"  [Agent] 依赖 Tools: {list(tools.keys())}")
-        print(f"  [Agent] 依赖 RAG 模块: {self.rag_module.__class__.__name__ if self.rag_module else 'NoneType'}") # 【更新打印信息】
+        print(f"  [Agent] 委托执行 Agents: [RAG: {self.rag_executor.name}, CALC: {self.calc_executor.name}]")
+
 
     def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """模拟意图识别和路由决策。"""
+        """LangGraph 节点的核心处理函数：意图识别和路由决策。"""
         user_input = state.get("input", "")
-        print(f"  [Router Agent 意图识别中]：原始输入：{user_input}")
-        # 模拟调用 LLM 进行意图识别
-        # decision = self.llm.generate(f"判断用户意图：{user_input}。返回'RAG'或'SEARCH'。")
+        print(f"\n[Router Agent 意图识别中]：原始输入：{user_input[:20]}...")
+        
+        # 意图识别 Prompt
+        prompt = (
+            f"原始输入：{user_input}\n"
+            "判断用户意图：如果用户在进行数学计算（例如：多少，等于，加，乘），返回 'CALCULATOR'。\n"
+            "如果用户在询问知识或概念（例如：是什么，为什么，介绍），返回 'RAG'。\n"
+            "否则返回 'DEFAULT'。\n"
+            "请只返回一个单词作为结果。"
+        )
 
-        # 假设 RAG 是关于“架构”或“流程”的，而 SEARCH 是关于“计算”的
-        if "计算" in user_input or "多少" in user_input:
+        # 模拟调用 LLM
+        decision = self.llm.generate(prompt).strip().upper()
+
+        # 确保 decision 是预期的路由键
+        if 'CALCULATOR' in decision:
             decision = "CALCULATOR"
-        elif "RAG" in user_input or "架构" in user_input or "LLM工厂" in user_input or "LangGraph" in user_input:
-             decision = "RAG"
+        elif 'RAG' in decision:
+            decision = "RAG"
         else:
-            decision = "SEARCH"
-            
+            decision = "DEFAULT"
+        
         print(f"  [Router Agent 意图]: 识别为 {decision}")
 
-         # 准备一个临时的状态更新字典
-        state_update: Dict[str, Any] = {"decision": decision, "query": user_input}
-
-        # --- LangGraph 路由修改点 ---
-        if decision == "CALCULATOR":
-            # 准备 Tool 流程的输入和调用
-            tool_name = "math_solver"
-            # 修正表达式提取 Bug
-            try:
-                calc_text = user_input.split("计算", 1)[-1].strip()
-                if '等于' in calc_text:
-                    calculation_text = calc_text.split("等于", 1)[0].strip()
-                else:
-                    calculation_text = calc_text.strip()
-                
-                expression = (
-                    calculation_text
-                    .replace("乘以", "*")
-                    .replace("加", "+")
-                    .replace("减", "-")
-                    .replace("除以", "/")
-                    .replace("除", "/")
-                    .replace(" ", "")
-                )
-
-                tool_output = self.tools[tool_name].run(expression) 
-                
-                # 添加 tool_output 到状态更新中
-                state_update["tool_output"] = tool_output
-
-            except Exception as e:
-                # 如果工具调用或解析失败，路由到 END
-                print(f"Tool 流程出错: {e}")
-                state_update["output"] = f"[Tool 流程出错]: {e}"
-                state_update["decision"] = "END" # 强制路由到 END
-
-        elif decision == "RAG":
-            # RAG 流程只需要 query 和 decision，不需要额外更新
-            pass
-        
-        # 返回最终的状态更新字典。LangGraph 会将此字典合并到全局状态中
-        return state_update
-
-
-
-
-    def get_agent_flow(self) -> Any:
-            """
-            返回 Agent 流程的 LangGraph 结构或可执行入口。
-            AgentFactory 将调用此方法来获取最终可运行的流程。
-            """
-            # 1. 定义图结构和状态
-            workflow = StateGraph(Dict[str, Any])
-            
-            # 2. 添加节点
-            # Router Agent 作为第一个节点，调用其自身的 process 方法
-            workflow.add_node("route", self.process)
-            
-            # 定义 RAG 节点和 Tool 节点 (使用 partial 注入依赖)
-            rag_node = lambda state: execute_rag(state, self.rag_module, self.llm)
-            tool_node = lambda state: execute_tool(state, self.llm)
-            
-            workflow.add_node("RAG", rag_node)
-            workflow.add_node("CALCULATOR", tool_node)
+        # 确保返回一个字典，这是 LangGraph 的要求
+        return {"decision": decision}
     
-            # 3. 设置边和条件路由
-            workflow.add_edge(START, "route")
+    
+    def get_agent_flow(self) -> Any:
+        """
+        定义 LangGraph 流程图 (Flow)。
+        LangGraph 节点现在委托给子 Agent 的 process 方法。
+        """
+        workflow = StateGraph(Dict[str, Any])
 
-            # **【核心修改点：定义路由函数，从状态字典中提取 decision 键】**
-            def route_decision(state: Dict[str, Any]) -> str:
-                """根据 'route' 节点返回的状态中的 'decision' 键进行路由。"""
-                return state.get("decision", "END")
-            
-            workflow.add_conditional_edges(
-                "route", 
-                # 将路由函数传递给 LangGraph
-                route_decision, 
-                {
-                    "RAG": "RAG",
-                    "CALCULATOR": "CALCULATOR",
-                    "END": END,
-                }
-            )
-            
-            # 4. 设置结束边
-            workflow.add_edge("RAG", END)
-            workflow.add_edge("CALCULATOR", END)
-            
-            # 编译流程图
-            return workflow.compile()
+        # 1. 添加节点 (节点现在是子 Agent 的 process 方法)
+        # 注意：节点名 (CALCULATOR, RAG) 必须与 RouterAgent.process 的返回值对应
+        workflow.add_node("route", self.process)
+        workflow.add_node("CALCULATOR", self.calc_executor.process) 
+        workflow.add_node("RAG", self.rag_executor.process)         
 
-        # if decision == "CALCULATOR":
-        #     # 路由到 TOOL 流程 (CALCULATOR)
-        #     tool_name = "math_solver"
-        #     # 仅提取表达式，不包含问题句式
-        #     expression = user_input.split("乘以", 1) 
-        #     expression = expression[-1].replace("等于多少？", "").strip() if len(expression) > 1 else "12 * 5"
-            
-        #     tool_output = self.tools[tool_name].run(expression)
-            
-        #     # 使用 LLM 格式化回复
-        #     llm_response = self.llm.generate(f"用户问题：{user_input}。工具结果：{tool_output}。请基于工具结果简洁回复。")
-        #     return {"output": f"[Router Agent 决定]：路由到 TOOL 流程。\n[Tool 结果]：{tool_output}\n[LLM 回复]：{llm_response}"}
+        # 2. 设置起点
+        workflow.set_entry_point("route")
 
-        # elif decision == "RAG":
-        #     # 路由到 RAG 流程
-        #     if not self.rag_module:
-        #          return {"output": "[Router Agent 决定]：路由到 RAG 流程，但 RAG 模块未注入。"}
-                 
-        #     # 【实际调用 RAG 模块进行检索】
-        #     context_docs = self.rag_module.hybrid_search(user_input, top_k=2)
-        #     context = "\n".join(context_docs)
-            
-        #     # 模拟用 LLM 进行总结 
-        #     llm_response = self.llm.generate(f"请基于以下上下文，回答用户的问题：{user_input}\n上下文:\n{context}")
-
-        #     return {"output": f"[Router Agent 决定]：路由到 RAG 流程。\n[RAG 检索上下文]：{context}\n[LLM 总结回复]：{llm_response}"}
-            
-            
+        # 3. 添加条件边 (Conditional Edges)
+        # 路由节点 (route) 根据其返回的 'decision' 键进行跳转
+        workflow.add_conditional_edges(
+            "route",
+            lambda x: x["decision"],
+            {
+                "CALCULATOR": "CALCULATOR",  # 跳转到 CalculatorAgent 节点
+                "RAG": "RAG",                # 跳转到 RAGAgent 节点
+                "DEFAULT": END,              # 默认情况直接结束
+            },
+        )
         
-        # # 模拟执行工具
-        # if "SEARCH" in decision:
-        #     search_result = self.tools['web_search'].run(user_input)
-        #     return {"output": f"[Router Agent 决定]：调用搜索工具。结果: {search_result}"}
-        # else:
-        #     return {"output": f"[Router Agent 决定]：路由到 RAG 流程。"}
-            
+        # 4. 添加普通边 (Normal Edges)
+        # 两个执行 Agent 完成后，流程直接结束
+        workflow.add_edge("CALCULATOR", END)
+        workflow.add_edge("RAG", END)
 
-# --- 其他 Agent 实现（例如 RAGAgent, PlannerAgent 等将添加到这里） ---
-# ...
+        print(f"[✔ 架构框架搭建完成]：RouterAgent 已重构，LangGraph 流程已使用子 Agent 接入。")
+        return workflow.compile()

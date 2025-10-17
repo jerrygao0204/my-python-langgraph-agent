@@ -43,6 +43,19 @@ tools:
         type: "search"
         api_url: "https://search.api/v1"
 
+#--- RAG 配置 ---
+rag:
+    primary_vector_store:
+        type: "chroma"
+        db_path: "./vector_storage/prod"
+        # collection_name: "main_knowledge"
+        collection_name: "project_knowledge_base"
+        search_k: 5
+        # 依赖注入配置
+        dependencies:
+            embed_key: "text_embedding" # 依赖 EmbeddingFactory 中的 'text_embedding'
+            
+
 #--- agent配置 ---
 agents:
     primary_router:
@@ -53,16 +66,39 @@ agents:
             llm_key: "prod_model"     # 依赖 LLMFactory 中的 'prod_model'
             tools_keys: ["web_search", "math_solver"]               # 依赖 ToolsFactory 中的这些工具
             rag_key: "primary_vector_store"     # 依赖 ragFactory 中的 'primary_vector_store'
+            # 🆕 声明 RouterAgent 依赖的子 Agent 实例 (AgentFactory 会递归创建它们)
+            executor_agents:
+                rag_executor: "rag_executor"
+                calc_executor: "calc_executor"
+
+    primary_rag_agent: # <-- 新增 RAG Agent 配置
+        type: "rag"
+        name: "DocumentAnswerer"
+        dependencies:
+            llm_key: "summary_model"
+            rag_key: "primary_vector_store" # 依赖 RAGFactory 中的 'primary_vector_store'
+            tools_keys: ["math_solver"] # RAG Agent 也可以使用工具
+        
+
+
+    # 新增 RAG 流程执行 Agent
+    rag_executor:
+        type: "rag"
+        name: "RAGExecutorAgent"
+        dependencies:
+            llm_key: "summary_model"    # 依赖 LLMFactory 中的 'summary_model' (专门用于总结)
+            rag_key: "primary_vector_store" # 依赖 RAGFactory 中的 RAGModule 实例
+
+    # 新增 Calculator Tool 执行 Agent
+    calc_executor:
+        type: "calculator"
+        name: "CalculatorExecutorAgent"
+        dependencies:
+            llm_key: "summary_model"    # 依赖 LLMFactory 中的 'summary_model' (专门用于格式化输出)
+            tools_keys: ["math_solver"] # 依赖 ToolsFactory 中的 'math_solver' (CalculatorAgent 实际运行的 Tool)
+            
         # Agent 自身参数
         routing_threshold: 0.8
 
-#--- RAG 配置 ---
-rag:
-    primary_vector_store:
-        type: "chroma"
-        db_path: "./vector_storage/prod"
-        collection_name: "main_knowledge"
-        # 依赖注入配置
-        dependencies:
-            embed_key: "text_embedding" # 依赖 EmbeddingFactory 中的 'text_embedding'
+
 

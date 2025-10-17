@@ -5,7 +5,7 @@ import chromadb
 from langchain_community.vectorstores import Chroma
 # 修正：EnsembleRetriever 已移至 langchain.retrievers
 from langchain.retrievers import EnsembleRetriever 
-from langchain.retrievers import BM25Retriever
+from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 
 # 全局变量用于存储内存中的 Chroma 客户端
