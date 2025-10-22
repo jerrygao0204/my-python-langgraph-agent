@@ -31,8 +31,18 @@ class AgentFactory(BaseFactory):
         """递归获取所有子执行 Agent 实例。"""
         executor_agents_instances = {}
         for exec_key in executor_keys:
-            # 这里的递归调用是 Agent 嵌套的关键
-            executor_agents_instances[exec_key] = self.get_instance(exec_key)
+            # 关键：递归调用自身，获取子 Agent 实例
+            # 如果这里的子 Agent 实例化失败，整个过程将中断
+            print(f"  [Factory] ↳ 正在递归实例化子 Agent: {exec_key}...")
+            # 捕获可能的错误，以便更好的调试
+            try:
+                executor_agents_instances[exec_key] = self.get_instance(exec_key)
+                print(f"  [Factory] ↳ 子 Agent {exec_key} 实例化成功。")
+            except Exception as e:
+                # 如果子 Agent 实例化失败，向上抛出，中断 Router 的实例化
+                print(f"  [Factory] ❌ 严重错误: 子 Agent '{exec_key}' 实例化失败。")
+                raise RuntimeError(f"子 Agent '{exec_key}' 实例化失败，无法继续组装 RouterAgent。原始错误: {e}")
+
         return executor_agents_instances
 
     def get_instance(self, component_key: str) -> AbstractAgent:
@@ -56,12 +66,13 @@ class AgentFactory(BaseFactory):
         print(f"\n--- 正在组装 Agent: {component_key} (Type: {agent_type}) ---")
 
         # 2. 从配置中提取依赖组件的 key
-        dependencies = agent_component_config.get("dependencies", {})
+        dependencies = agent_component_config.get("dependencies", [])
         llm_dependency_key = dependencies.get("llm_key")
         tools_dependency_keys = dependencies.get("tools_keys", [])
         rag_dependency_key = dependencies.get("rag_key")
         # 🆕 新增：提取子 Agent 依赖的 key
-        executor_keys = dependencies.get("executor_agents", {}) 
+        executor_keys = dependencies.get("executor_keys", [])
+        
 
         # # 3. 通过注入的工厂获取依赖实例 (LLM, Tools, RAG)
         # llm_instance = self.llm_factory.get_instance(llm_dependency_key) if llm_dependency_key else None
@@ -77,22 +88,25 @@ class AgentFactory(BaseFactory):
         tools_instances = {}
         for tool_key in tools_dependency_keys:
             tools_instances[tool_key] = self.tools_factory.get_instance(tool_key)
-
+        agent_dependencies['tools'] = tools_instances
+            
        # 依赖注入 RAG Module
         if rag_dependency_key:
             agent_dependencies['rag_module'] = self.rag_factory.get_instance(rag_dependency_key)
-        agent_dependencies['tools'] = tools_instances
             
         # 依赖注入子 Agent 实例 (执行器)
+        
         if executor_keys:
              agent_dependencies['executor_agents'] = self._get_executor_agents_instances(executor_keys)
 
         # 4. 始终注入 Agent 自身的配置
         agent_dependencies['config'] = agent_component_config
+        
 
         # 5. 实例化 Agent 对象，使用字典展开 (解决了 TypeError)
         try:
             agent_instance = AgentClass(**agent_dependencies)
+
             return agent_instance
         except TypeError as e:
             # 捕获并提供更详细的错误信息

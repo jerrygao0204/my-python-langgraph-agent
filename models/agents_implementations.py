@@ -106,8 +106,9 @@ class RouterAgent(AbstractAgent):
     Agent 路由器：模拟根据用户输入进行意图识别和流程选择。
     现在它注入了子 Agent 实例，并将执行逻辑委托给它们。
     """
-    def __init__(self, llm: AbstractLLM, tools: Dict[str, AbstractTool], rag_module: RAGModule, 
-                 config: Dict[str, Any], **executor_agents: AbstractAgent): # ⬅️ 注入子 Agent
+    # def __init__(self, llm: AbstractLLM, tools: Dict[str, AbstractTool], rag_module: RAGModule, 
+    #              config: Dict[str, Any], **executor_agents: AbstractAgent): # ⬅️ 注入子 Agent
+    def __init__(self, llm: AbstractLLM, tools: Dict[str, AbstractTool], rag_module: RAGModule, config: Dict[str, Any], executor_agents: Dict[str, AbstractAgent]):
         
         # 依赖注入：注入 LLM 实例, Tools 集合, RAG 模块
         self.llm = llm
@@ -116,6 +117,10 @@ class RouterAgent(AbstractAgent):
         self.config = config
         self.name = config.get("name", "DefaultRouter")
         self.executor_agents = executor_agents
+
+        # 强制检查关键子 Agent 是否存在 (根据 config.yaml 中的 key)
+        required_keys = ["rag_executor", "calc_executor"]
+        missing_executors = [k for k in required_keys if k not in self.executor_agents]
         
         # 注入子 Agent 实例
         # 必须使用与 AgentFactory 注入时相同的 key
@@ -125,6 +130,10 @@ class RouterAgent(AbstractAgent):
         # 确保子 Agent 已注入
         if not self.rag_executor or not self.calc_executor:
              raise RuntimeError("RouterAgent 启动失败：缺少必要的执行 Agent (rag_executor 或 calc_executor)。")
+
+        if missing_executors:
+            # 修正：捕获运行时错误（这是上一个问题中解决的逻辑）
+            raise RuntimeError(f"RouterAgent 启动失败：缺少必要的执行 Agent: {missing_executors}。")
 
         print(f"  [Agent] RouterAgent '{self.name}' 已初始化。")
         print(f"  [Agent] 依赖 LLM: {self.llm.__class__.__name__}")
