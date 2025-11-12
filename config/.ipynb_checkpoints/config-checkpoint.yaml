@@ -65,7 +65,7 @@ agents:
         dependencies:
             llm_key: "prod_model"     # 依赖 LLMFactory 中的 'prod_model'
             tools_keys: ["web_search", "math_solver"]               # 依赖 ToolsFactory 中的这些工具
-            rag_key: "primary_vector_store"     # 依赖 ragFactory 中的 'primary_vector_store'
+            # rag_key: "primary_vector_store"     # 依赖 ragFactory 中的 'primary_vector_store'
             # 🆕 声明 RouterAgent 依赖的子 Agent 实例 (AgentFactory 会递归创建它们)
             executor_keys: ["rag_executor", "calc_executor"]
 

@@ -60,7 +60,8 @@ def main():
 
 
     # --- 3. 从 RAG Factory 获取 RAG 模块并演示 ---
-    rag_processor = router_agent.rag_module
+    # rag_processor = router_agent.rag_module
+    rag_processor = router_agent.rag_executor.rag_module
 
     if rag_processor is None:
         raise RuntimeError("RAG 模块未成功注入到 RouterAgent 中。请检查 AgentFactory 和 config.yaml。")
@@ -87,7 +88,7 @@ def main():
     run_agent_flow(app_flow, "帮我计算 (12 乘以 5) 加上 3 等于多少？")
 
     # 案例二：RAG 流程 (路由 -> RAGAgent)
-    run_agent_flow(app_flow, "LLM工厂用于解耦多模型调用，这是什么架构的核心？")
+    run_agent_flow(app_flow, "帮我查询LLM工厂用于解耦多模型调用，这是什么架构的核心？")
     
     # 案例三：DEFAULT 流程 (路由 -> END)
     run_agent_flow(app_flow, "今天天气真好，我们应该去哪里野餐？")
