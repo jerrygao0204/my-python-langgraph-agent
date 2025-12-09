@@ -1,5 +1,6 @@
 from typing import Dict, Any
 from .llm_abc import AbstractTool # 从新的模块导入抽象基类
+import asyncio
 
 # --- Tool 实现 ---
 
@@ -12,7 +13,7 @@ class CalculatorTool(AbstractTool):
         print(f"初始化 CalculatorTool (版本: {config.get('version', '1.0')})")
         self.version = config.get('version', '1.0')
 
-    def run(self, input_data: str) -> str:
+    async def run(self, input_data: str) -> str:
         """
         模拟执行计算，输入通常是数学表达式字符串。
         """
@@ -32,7 +33,7 @@ class SearchTool(AbstractTool):
         print(f"初始化 SearchTool (API URL: {config.get('api_url', 'N/A')})")
         self.api_url = config.get('api_url', 'N/A')
 
-    def run(self, input_data: str) -> str:
+    async def run(self, input_data: str) -> str:
         """
         模拟执行网络搜索，输入通常是搜索关键词。
         """

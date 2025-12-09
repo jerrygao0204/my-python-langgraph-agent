@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
+import asyncio
 
 # --- LLM 和 Embedding 接口（保持不变）---
 class AbstractLLM(ABC):
     @abstractmethod
-    def generate(self, prompt: str, **kwargs) -> str:
+    async def generate(self, prompt: str, **kwargs) -> str:
         """统一的模型生成接口。"""
         pass
 
@@ -22,14 +23,14 @@ class AbstractEmbedding(ABC):
 # --- Tools 接口（保持不变）---
 class AbstractTool(ABC):
     @abstractmethod
-    def run(self, input_text: str) -> str:
+    async def run(self, input_text: str) -> str:
         """统一的工具运行接口。"""
         pass
 
 # --- Agent 接口（新增）---
 class AbstractAgent(ABC):
     @abstractmethod
-    def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Agents的核心处理流程。
         接收当前的Agent状态（state），执行决策或业务逻辑，并返回更新后的状态。

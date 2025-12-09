@@ -7,8 +7,9 @@ from config.config import load_config
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END, START 
 import copy 
+import asyncio
 
-def run_agent_flow(app_flow: StateGraph, query: str):
+async def run_agent_flow(app_flow: StateGraph, query: str):
     """
     运行 LangGraph 流程。
     """
@@ -19,7 +20,7 @@ def run_agent_flow(app_flow: StateGraph, query: str):
     
     # 运行流程
     try:
-        final_state = app_flow.invoke(initial_state)
+        final_state = await app_flow.ainvoke(initial_state)
 
         # 打印最终结果
         print("--------------------------------------------------")
@@ -31,7 +32,7 @@ def run_agent_flow(app_flow: StateGraph, query: str):
         print(f"❌ LangGraph 流程执行失败: {e}")
         print("--------------------------------------------------")
 
-def main():
+async def main():
     """主程序入口，加载配置，初始化工厂并获取所需组件。"""
     
     # --- 1. 加载配置 ---
@@ -85,13 +86,13 @@ def main():
     print("[✔ 架构框架搭建完成]：已进入 LangGraph 流程编排阶段。")
     
     # 案例一：CALCULATOR 流程 (路由 -> CalculatorAgent)
-    run_agent_flow(app_flow, "帮我计算 (12 乘以 5) 加上 3 等于多少？")
+    await run_agent_flow(app_flow, "帮我计算 (12 乘以 5) 加上 3 等于多少？")
 
     # 案例二：RAG 流程 (路由 -> RAGAgent)
-    run_agent_flow(app_flow, "帮我查询LLM工厂用于解耦多模型调用，这是什么架构的核心？")
+    await run_agent_flow(app_flow, "帮我查询LLM工厂用于解耦多模型调用，这是什么架构的核心？")
     
     # 案例三：DEFAULT 流程 (路由 -> END)
-    run_agent_flow(app_flow, "今天天气真好，我们应该去哪里野餐？")
+    await run_agent_flow(app_flow, "今天天气真好，我们应该去哪里野餐？")
     
 
 if __name__ == "__main__":
@@ -101,4 +102,4 @@ if __name__ == "__main__":
     
     # 假设 load_config 函数已定义在 config.config 模块中
     # 运行主函数
-    main()
+    asyncio.run(main())

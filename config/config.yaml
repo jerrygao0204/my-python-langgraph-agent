@@ -12,9 +12,9 @@ llm:
     
     #用于 RAG 总结或意图识别的 LLM
     summary_model:
-        name: "Local-Llama-7B"
+        name: "Qwen/Qwen3-1.7B"
         provider: "huggingface"  # 对应 factory/llm_factory.py 中的映射
-        pipeline_url: "http://localhost:8080/generate" # 本地部署 LLM 的 API 地址
+        pipeline_url: "http://localhost:8000/v1" # 本地部署 LLM 的 API 地址
         temperature: 0.5
 
 #--- 嵌入模型配置 (RAG) ---

@@ -2,7 +2,8 @@ from typing import Dict, Any, List, Type
 from models.llm_abc import AbstractAgent, AbstractLLM, AbstractTool
 from rag.rag_module import RAGModule
 from langgraph.graph import StateGraph, END, START 
-
+# from tools_implementations import SearchTool
+import asyncio
 
 
 # --- Agent 实现：RAGAgent (负责执行 RAG 流程) ---
@@ -20,7 +21,7 @@ class RAGAgent(AbstractAgent):
         print(f"  [Agent] 依赖 RAG Module: {self.rag_module.__class__.__name__}")
         print(f"  [Agent] 依赖 Tools: {list(tools.keys())}")
 
-    def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """执行混合搜索和 LLM 总结。"""
         query = state.get("input", state.get("query", ""))
             
@@ -29,13 +30,13 @@ class RAGAgent(AbstractAgent):
         context = "\n".join(context_docs)
         
         # # 使用 LLM 进行总结
-        # final_answer = self.llm.generate(f"请基于以下上下文，回答用户的问题：{query}\n上下文:\n{context}")
+        final_answer = await self.llm.generate(f"请基于以下上下文，回答用户的问题：{query}\n上下文:\n{context}")
 
-        # 模拟 RAG 流程
-        final_answer = (
-            f"✅ RAG 流程执行成功：根据 RAG 知识库检索结果，查询 '{query[:10]}...' "
-            f"的答案是：LLM 工厂用于解耦多模型调用，这是 **工厂模式和依赖注入** 架构的核心。"
-        )
+        # # 模拟 RAG 流程
+        # final_answer = (
+        #     f"✅ RAG 流程执行成功：根据 RAG 知识库检索结果，查询 '{query[:10]}...' "
+        #     f"的答案是：LLM 工厂用于解耦多模型调用，这是 **工厂模式和依赖注入** 架构的核心。"
+        # )
 
         return {
             "output": f"[RAG 流程完成]\n[检索上下文]：{context}\n[LLM 最终回复]：{final_answer}", 
@@ -58,7 +59,7 @@ class CalculatorAgent(AbstractAgent):
         self.name = config.get("name", "CalculatorAgent")
         print(f"  [Agent] CalculatorAgent '{self.name}' 已初始化。")
         
-    def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """执行数学计算并返回结果。"""
         query = state.get("input", state.get("query", ""))
         
@@ -66,51 +67,11 @@ class CalculatorAgent(AbstractAgent):
         print(f"\n[Calculator Agent 执行中]：意图识别为计算，正在执行 Tool 调用...")
 
         # 模拟 Tool 运行结果
-        tool_result = self.tools['math_solver'].run("12 * 5 + 3") # 假设工具能直接计算表达式
+        tool_result = await self.tools['math_solver'].run("12 * 5 + 3") # 假设工具能直接计算表达式
 
         # 必须返回包含 'output' 键的状态
         return {"output": f"✅ Calculator 流程执行成功：计算查询 '{query[:10]}...' 的结果是：{tool_result}"}
-        # """解析表达式，调用 Tool，并进行 LLM 总结。"""
-        # user_input = state.get("input", "")
-        # tool_name = "math_solver" # 硬编码工具键名
-        
-        # # 【核心逻辑：将表达式解析和 Tool 调用移到这里，实现完全解耦】
-        # try:
-        #     # 1. 表达式解析（沿用 RouterAgent 中修复后的逻辑）
-        #     calc_text = user_input.split("计算", 1)[-1].strip()
-        #     if '等于' in calc_text:
-        #         calculation_text = calc_text.split("等于", 1)[0].strip()
-        #     else:
-        #         calculation_text = calc_text.strip()
-            
-        #     expression = (
-        #         calculation_text
-        #         .replace("乘以", "*")
-        #         .replace("加", "+")
-        #         .replace("减", "-")
-        #         .replace("除以", "/")
-        #         .replace("除", "/")
-        #         .replace(" ", "")
-        #     )
-
-        #     # 2. 实际运行 Tool
-        #     tool_output = self.tools[tool_name].run(expression) 
-        #     print(f"\n[Calculator Agent] -> 工具结果：{tool_output[:20]}...")
-            
-        #     # 3. 使用 LLM 格式化回复
-        #     final_answer = self.llm.generate(f"用户问题：{user_input}。工具结果：{tool_output}。请基于工具结果简洁回复。")
-
-        #     return {
-        #         "output": f"[Tool 流程完成]\n[LLM 最终回复]：{final_answer}", 
-        #         "decision": "END"
-        #     }
-
-        # except Exception as e:
-        #     return {
-        #         "output": f"[Tool 流程出错]: 无法计算或解析表达式 '{user_input}'. 错误: {e}", 
-        #         "decision": "END"
-        #     }
-
+    
     def get_agent_flow(self) -> Any:
         # 简单返回 process 方法
         return self.process
@@ -159,18 +120,29 @@ class RouterAgent(AbstractAgent):
         print(f"  [Agent] 委托执行 Agents: [RAG: {self.rag_executor.name}, CALC: {self.calc_executor.name}]")
 
 
-    def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """LangGraph 节点的核心处理函数：意图识别和路由决策。"""
         user_input = state.get("input", "")
         print(f"\n[Router Agent 意图识别中]：原始输入：{user_input[:20]}...")
         
         # 意图识别 Prompt
-        prompt = (
+        prompt_llm = (
             f"原始输入：{user_input}，判断用户意图：如果用户在进行数学计算（例如：多少，等于，加，乘），返回 'CALCULATOR'。如果用户在询问知识或概念（例如：是什么，为什么，介绍），返回 'RAG'。否则返回 'DEFAULT'。请只返回一个单词作为结果。"
         )
+        prompt_web_search = user_input
         # 第一次调用 LLM 并获取原始响应
-        decision_raw = self.llm.generate(prompt) 
+        # 创建协程对象 (注意：这里不加 await，只是创建任务)
+        llm_task = self.llm.generate(prompt_llm)
+        search_tool_task = self.tools['web_search'].run(prompt_web_search)
+        # 结果将按任务在 gather 中的顺序返回
+        decision_raw, search_result = await asyncio.gather(
+            llm_task, 
+            search_tool_task
+        )
+
         print(f"  [Router Agent LLM 原生响应]: {decision_raw}") # 打印 LLM 的原生响应
+        # 打印搜索结果（用于演示并发已完成）
+        print(f"  [Router Agent 并发 Web 搜索结果]: {search_result[:30]}...")
 
         # 规范化 decision：转换为大写并去除空格
         decision = decision_raw.strip().upper()
@@ -191,7 +163,7 @@ class RouterAgent(AbstractAgent):
         print(f"  [Router Agent 意图]: 识别为 {decision}")
 
         # 确保返回一个字典，这是 LangGraph 的要求
-        return {"decision": decision}
+        return {"decision": decision,"tools": search_result}
     
     
     def get_agent_flow(self) -> Any:

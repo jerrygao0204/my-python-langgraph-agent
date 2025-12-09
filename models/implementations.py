@@ -1,6 +1,7 @@
 from typing import Dict, Any, List
-# 从新的模块导入抽象基类
+from openai import AsyncOpenAI
 from .llm_abc import AbstractLLM, AbstractEmbedding
+import asyncio
 
 # --- LLM 实现 ---
 
@@ -11,7 +12,7 @@ class GPTModel(AbstractLLM):
         print(f"初始化 GPT 模型: {config['name']} (温度: {config['temperature']})")
         self.model_name = config['name']
 
-    def generate(self, prompt: str, **kwargs) -> str:
+    async def generate(self, prompt: str, **kwargs) -> str:
             # ⚠️ 最终修正：硬编码匹配测试用例，确保 LangGraph 路由成功
             query_lower = prompt.lower()
             
@@ -38,25 +39,47 @@ class HuggingFacePipelineModel(AbstractLLM):
     """实现 Hugging Face 或 vLLM 服务调用的具体逻辑。"""
     def __init__(self, config: Dict[str, Any]):
         # 实际项目中，这里会初始化 LangChain 的 HuggingFacePipeline
-        print(f"初始化 Hugging Face 模型: {config['name']} (URL: {config['pipeline_url']})")
         self.model_name = config['name']
+        self.base_url = config.get('pipeline_url', "http://localhost:8000/v1")
+        self.temperature = config.get('temperature', 0.7)
+        print(f"初始化 Hugging Face 模型: {config['name']} (URL: {config['pipeline_url']})")
 
-    def generate(self, prompt: str, **kwargs) -> str:
+        # 1. 初始化 AsyncOpenAI 客户端
+        self.client = AsyncOpenAI(
+            base_url=self.base_url, 
+            api_key="EMPTY" # vLLM 通常不需要真实的 key
+        )
+
+    async def generate(self, prompt: str, **kwargs) -> str:
+        # 3. 使用 await 调用异步 API
+        response = await self.client.chat.completions.create(
+            # 使用 config.yaml 中配置的模型名
+            model=self.model_name, 
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=self.temperature,
+            # 可以根据需要添加 max_tokens, stop 等参数
+        )
+        
+        # 4. 返回模型响应的文本内容
+        return response.choices[0].message.content
+        
         # return f"[HuggingFace 模型 {self.model_name} 响应]: {prompt[:20]}..."
-        # 1. 检查是否是计算意图
-        if "计算" in prompt or "算术" in prompt:
-            # 模拟 LLM 返回包含 "CALCULATOR" 的字符串
-            return f"[HuggingFace 模型 {self.model_name} 响应]: 使用 CALCULATOR 工具进行计算。"
+        # # 1. 检查是否是计算意图
+        # if "计算" in prompt or "算术" in prompt:
+        #     # 模拟 LLM 返回包含 "CALCULATOR" 的字符串
+        #     return f"[HuggingFace 模型 {self.model_name} 响应]: 使用 CALCULATOR 工具进行计算。"
         
-        # 2. 检查是否是 RAG 意图（查询内部知识或架构）
-        elif "LLM工厂" in prompt or "架构" in prompt or "混合搜索" in prompt or "查询" in prompt:
-            # 模拟 LLM 返回包含 "RAG" 的字符串
-            return f"[HuggingFace 模型 {self.model_name} 响应]: 这是一个 RAG 相关的查询，请使用 RAG 工具。"
+        # # 2. 检查是否是 RAG 意图（查询内部知识或架构）
+        # elif "LLM工厂" in prompt or "架构" in prompt or "混合搜索" in prompt or "查询" in prompt:
+        #     # 模拟 LLM 返回包含 "RAG" 的字符串
+        #     return f"[HuggingFace 模型 {self.model_name} 响应]: 这是一个 RAG 相关的查询，请使用 RAG 工具。"
         
-        # 3. 默认回复 (例如，天气、闲聊)
-        else:
-            # 模拟 LLM 返回默认响应，并触发 DEFAULT 路由
-            return f"[HuggingFace 模型 {self.model_name} 响应]: {prompt[:10]}...这是一个闲聊/默认响应。"
+        # # 3. 默认回复 (例如，天气、闲聊)
+        # else:
+        #     # 模拟 LLM 返回默认响应，并触发 DEFAULT 路由
+        #     return f"[HuggingFace 模型 {self.model_name} 响应]: {prompt[:10]}...这是一个闲聊/默认响应。"
 
 # --- Embedding 实现 ---
 
